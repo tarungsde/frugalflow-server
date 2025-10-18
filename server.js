@@ -15,7 +15,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT;
-const saltRounds = process.env.SALT_ROUNDS;
+const saltRounds = parseInt(process.env.SALT_ROUNDS);
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
