@@ -25,7 +25,12 @@ app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: true,
-  cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 },
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production', // only over HTTPS
+    sameSite: 'none', // allows cross-origin cookies
+  },
 }));
 
 app.use(cors({
