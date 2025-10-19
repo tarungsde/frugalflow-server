@@ -44,15 +44,15 @@ app.get("/", (req, res) => {
   res.json("Server is running.");
 });
 
-app.get("/auth/google", passport.authenticate("google", {
-  scope: ["profile", "email"],
-}));
+// app.get("/auth/google", passport.authenticate("google", {
+//   scope: ["profile", "email"],
+// }));
 
-app.get("/auth/google/otunar/", passport.authenticate("google", {
-    successRedirect: process.env.APPLICATION_URL, 
-    failureRedirect: process.env.APPLICATION_URL + "/login?error=Invalid credentials",
-  })
-);
+// app.get("/auth/google/otunar/", passport.authenticate("google", {
+//     successRedirect: process.env.APPLICATION_URL, 
+//     failureRedirect: process.env.APPLICATION_URL + "/login?error=Invalid credentials",
+//   })
+// );
 
 app.get("/logout", (req, res, next) => {
   req.logOut(err => {
@@ -284,30 +284,30 @@ passport.use("local",
   })
 );
 
-passport.use("google", new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_CALLBACK_URL,
-  userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
-}, async (accessToken, refreshToken, profile, cb) => {
+// passport.use("google", new GoogleStrategy({
+//   clientID: process.env.GOOGLE_CLIENT_ID,
+//   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+//   callbackURL: process.env.GOOGLE_CALLBACK_URL,
+//   userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
+// }, async (accessToken, refreshToken, profile, cb) => {
 
-  try {
-    const existingUser = await User.findOne({email : profile.email});
+//   try {
+//     const existingUser = await User.findOne({email : profile.email});
 
-    if (existingUser) {
-      cb(null, existingUser);
-    } else {
-      const newUser = new User({
-        email : profile.email,
-        password : "google",
-      });
-      await newUser.save();
-      cb(null, newUser);
-    }
-  } catch (err) {
-    return cb(err);
-  }
-}));
+//     if (existingUser) {
+//       cb(null, existingUser);
+//     } else {
+//       const newUser = new User({
+//         email : profile.email,
+//         password : "google",
+//       });
+//       await newUser.save();
+//       cb(null, newUser);
+//     }
+//   } catch (err) {
+//     return cb(err);
+//   }
+// }));
 
 passport.serializeUser((user, cb) => {
   cb(null, user._id);
