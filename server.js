@@ -159,31 +159,58 @@ app.get("/generate-report", ensureAuth, async (req, res) => {
 });
 
 
+// app.post("/register", async (req, res) => {
+//   const { email, password } = req.body;
+
+//   const existingUser = await User.findOne({email});
+//   if (existingUser) {
+//     return res.status(404).json({ message : "Account already exists."});
+//   }
+
+//   const hashedPassword = await bcrypt.hash(password, saltRounds);  
+//   const newUser = new User({
+//     email,
+//     password : hashedPassword,
+//   });
+
+//   await newUser.save();
+
+//   req.login(newUser, err=> {
+//     if (err) {
+//       console.log("Login error:", err);
+//       return res.status(500).json({ message: "Login failed after registration" }); 
+//     }
+
+//     return res.status(201).json({ message: "User registered and logged in successfully" });
+//   });
+
+// });
+
 app.post("/register", async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
+    const existingUser = await User.findOne({ email });
 
-  const existingUser = await User.findOne({email});
-  if (existingUser) {
-    return res.status(404).json({ message : "Account already exists."});
-  }
-
-  const hashedPassword = await bcrypt.hash(password, saltRounds);  
-  const newUser = new User({
-    email,
-    password : hashedPassword,
-  });
-
-  await newUser.save();
-
-  req.login(newUser, err=> {
-    if (err) {
-      console.log("Login error:", err);
-      return res.status(500).json({ message: "Login failed after registration" }); 
+    if (existingUser) {
+      return res.status(404).json({ message: "Account already exists." });
     }
 
-    return res.status(201).json({ message: "User registered and logged in successfully" });
-  });
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const newUser = new User({ email, password: hashedPassword });
+    await newUser.save();
 
+    req.login(newUser, err => {
+      if (err) {
+        console.error("Login error after registration:", err);
+        return res.status(500).json({ message: "Login failed after registration" });
+      }
+
+      return res.status(201).json({ message: "User registered and logged in successfully" });
+    });
+  } catch (err) {
+    console.error("Error during registration:", err);
+    res.status(500).json({ message: "Registration failed" });
+  }
 });
 
 app.post("/login", (req, res, next) => {
