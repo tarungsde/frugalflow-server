@@ -1,9 +1,9 @@
 import express from "express";
 import mongoose from "mongoose";
-import User from "./models/User.js"
+import User from "./models/User.js";
 import Transaction from "./models/Transaction.js";
 import bcrypt from "bcrypt";
-import dotenv from "dotenv"
+import dotenv from "dotenv";
 import cors from "cors";
 import session from "express-session";
 import passport from "passport";
@@ -49,6 +49,7 @@ app.get("/", (req, res) => {
   res.json("Server is running.");
 });
 
+// Logout
 app.get("/logout", (req, res, next) => {
   req.logOut(err => {
     if (err) return next(err);
@@ -57,29 +58,30 @@ app.get("/logout", (req, res, next) => {
   });
 });
 
+// Get current user info
 app.get("/me", (req, res) => {
-  // Removed auth check
   res.status(200).json({ loggedIn: req.isAuthenticated(), user: req.user || null });
 });
 
-// Removed ensureAuth completely
-
+// All transactions (auth optional)
 app.get("/all-transactions", async (req, res) => {
   try {
-    const allTransaction = await Transaction.find({}); // no user filter
+    const userId = req.user?._id;
+    const allTransaction = userId ? await Transaction.find({ userId }) : [];
     res.json(allTransaction);
-
   } catch (error) {
     console.error("Error fetching transactions:", error);
-    res.status(500).json({ message: "Failed to fetch transactions" }); 
+    res.status(500).json({ message: "Failed to fetch transactions" });
   }
 });
 
+// Filter transactions
 app.get("/filter", async (req, res) => {
-  const { type, category, startDate, endDate} = req.query;
+  const { type, category, startDate, endDate } = req.query;
 
   try {
     let filter = {};
+    if (req.user?._id) filter.userId = req.user._id;
 
     if (type) filter.type = type;
     if (category) filter.category = category;
@@ -91,30 +93,29 @@ app.get("/filter", async (req, res) => {
         let end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
         filter.date.$lte = end;
-      } 
+      }
     }
 
     const filteredData = await Transaction.find(filter).sort({ date: -1 });
     res.json(filteredData);
   } catch (error) {
-    console.log("Error before filtering : ", error);
+    console.error("Error filtering transactions:", error);
     res.status(500).json({ message: "Failed to filter transactions" });
   }
 });
 
+// Generate report
 app.get("/generate-report", async (req, res) => {
   try {
+    const userId = req.user?._id;
     const month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const transactions = await Transaction.find({ date: { $gte: month } }); // no user filter
 
-    const totalIncome = transactions
-      .filter(t => t.type === "income")
-      .reduce((a,b) => a + b.amount, 0);
-    
-    const totalExpense = transactions
-      .filter(t => t.type === "expense")
-      .reduce((a, b) => a + b.amount, 0);
+    const transactions = userId
+      ? await Transaction.find({ userId, date: { $gte: month } })
+      : [];
 
+    const totalIncome = transactions.filter(t => t.type === "income").reduce((a,b) => a + b.amount, 0);
+    const totalExpense = transactions.filter(t => t.type === "expense").reduce((a,b) => a + b.amount, 0);
     const balance = totalIncome - totalExpense;
 
     const summary = `
@@ -125,14 +126,14 @@ app.get("/generate-report", async (req, res) => {
     `;
 
     const prompt = `Here is a user's financial summary for this month:\n${summary}\n
-    Please generate a simple financial report with:
-    1. Summary of income and expenses.
-    2. Advice on savings and budgeting.
-    3. Summary and advice should contain around 70 words each in a paragraph.
-    4. Tone should be friendly and encouraging.
-    5. Provide the report in plain text without any markdown formatting.
-    6. Only contain 2 paragraphs in total.
-    7. Inbetween the 2 paragraphs, add a || symbbol.
+      Please generate a simple financial report with:
+      1. Summary of income and expenses.
+      2. Advice on savings and budgeting.
+      3. Summary and advice should contain around 70 words each in a paragraph.
+      4. Tone should be friendly and encouraging.
+      5. Provide the report in plain text without any markdown formatting.
+      6. Only contain 2 paragraphs in total.
+      7. Inbetween the 2 paragraphs, add a || symbbol.
     `;
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -140,13 +141,14 @@ app.get("/generate-report", async (req, res) => {
     const reportText = result.response.text();
 
     res.json({ report: reportText });
-    
+
   } catch (error) {
-    console.error("Erros while generating report", error);
+    console.error("Error generating report:", error);
     res.status(500).json({ report: "Failed to generate report due to server error." });
   }
 });
 
+// Register
 app.post("/register", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -174,6 +176,7 @@ app.post("/register", async (req, res) => {
   }
 });
 
+// Login
 app.post("/login", (req, res, next) => {
   passport.authenticate("local", (err, user, info) => {
     if (err) return next(err);
@@ -190,16 +193,21 @@ app.post("/login", (req, res, next) => {
   })(req, res, next);
 });
 
+// Add transaction
 app.post("/add-transaction", async (req, res) => {
   try {
     const { type, category, amount, date, description } = req.body;
 
     const newTransaction = new Transaction({
-      type, category, amount, date, description
+      type,
+      category,
+      amount,
+      date,
+      description,
+      userId: req.user?._id || null
     });
 
     await newTransaction.save();
-
     res.status(201).json({ message: "Transaction received" });
 
   } catch (err) {
@@ -208,20 +216,19 @@ app.post("/add-transaction", async (req, res) => {
   }
 });
 
+// Update transaction
 app.put("/update-transaction/:id", async (req, res) => {
   try {
     const transactionId = req.params.id;
     const { type, category, amount, description, date } = req.body;
 
     const updated = await Transaction.findOneAndUpdate(
-      { _id: transactionId },
+      { _id: transactionId, userId: req.user?._id },
       { type, category, amount, description, date },
       { new: true }
     );
 
-    if (!updated) {
-      return res.status(404).json({ message: "Transaction not found" });
-    }
+    if (!updated) return res.status(404).json({ message: "Transaction not found" });
 
     res.status(200).json({ message: "Transaction updated successfully", updated });
   } catch (error) {
@@ -230,10 +237,11 @@ app.put("/update-transaction/:id", async (req, res) => {
   }
 });
 
+// Delete transaction
 app.delete("/delete-transaction/:id", async (req, res) => {
   try {
     const transactionId = req.params.id;
-    const deleted = await Transaction.deleteOne({ _id: transactionId });
+    const deleted = await Transaction.deleteOne({ _id: transactionId, userId: req.user?._id });
     res.status(200).json({ message: "Transaction deleted successfully" });
   } catch (error) {
     console.error("Error deleting transaction:", error);
@@ -241,24 +249,17 @@ app.delete("/delete-transaction/:id", async (req, res) => {
   }
 });
 
+// Passport local strategy
 passport.use("local",
   new Strategy({ usernameField: "email" }, async function verify(email, password, cb) {
-
     try {
       const existingUser = await User.findOne({email});
-      if (!existingUser) {
-        console.log("Account does not exist.");
-        return cb(null, false, { message: "Account does not exist" });
-      }
+      if (!existingUser) return cb(null, false, { message: "Account does not exist" });
 
       const isMatch = await bcrypt.compare(password, existingUser.password);
+      if (!isMatch) return cb(null, false, { message: "Invalid Credentials" });
 
-      if (!isMatch) {
-        console.log("Invalid Credentials");
-        return cb(null, false, { message: "Invalid Credentials" });
-      }
       return cb(null, existingUser);
-
     } catch (err) {
       console.error("Error during authentication:", err);
       return cb(err);
@@ -266,10 +267,8 @@ passport.use("local",
   })
 );
 
-passport.serializeUser((user, cb) => {
-  cb(null, user._id);
-});
-
+// Passport serialize/deserialize
+passport.serializeUser((user, cb) => cb(null, user._id));
 passport.deserializeUser(async (id, cb) => {
   try {
     const user = await User.findById(id);
@@ -279,6 +278,7 @@ passport.deserializeUser(async (id, cb) => {
   }
 });
 
+// Start server
 app.listen(port, () => {
-  console.log(`App is running on http://localhost:${port}.`)
+  console.log(`App is running on http://localhost:${port}.`);
 });
