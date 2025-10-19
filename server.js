@@ -75,12 +75,12 @@ app.get("/me", (req, res) => {
   }
 });
 
-// const ensureAuth = (req, res, next) => {
-//   if (req.isAuthenticated()) return next();
-//   res.status(401).json({ message: "Not authenticated" });
-// };
+const ensureAuth = (req, res, next) => {
+  if (req.isAuthenticated()) return next();
+  res.status(401).json({ message: "Not authenticated" });
+};
 
-app.get("/all-transactions", async (req, res) => {
+app.get("/all-transactions", ensureAuth, async (req, res) => {
   try {
     const allTransaction = await Transaction.find({userId: req.user._id});
     res.json(allTransaction);
@@ -91,7 +91,7 @@ app.get("/all-transactions", async (req, res) => {
   }
 });
 
-app.get("/filter", async (req, res) => {
+app.get("/filter", ensureAuth, async (req, res) => {
   const { type, category, startDate, endDate} = req.query;
 
   try {
@@ -118,7 +118,7 @@ app.get("/filter", async (req, res) => {
   }
 });
 
-app.get("/generate-report", async (req, res) => {
+app.get("/generate-report", ensureAuth, async (req, res) => {
   try {
     const month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const transactions = await Transaction.find({userId: req.user._id, date: {$gte: month}});
@@ -234,7 +234,7 @@ app.post("/login", (req, res, next) => {
   })(req, res, next);
 });
 
-app.post("/add-transaction", async (req, res) => {
+app.post("/add-transaction", ensureAuth, async (req, res) => {
   try {
     const { type, category, amount, date, description } = req.body;
 
@@ -258,7 +258,7 @@ app.post("/add-transaction", async (req, res) => {
   
 });
 
-app.put("/update-transaction/:id", async (req, res) => {
+app.put("/update-transaction/:id", ensureAuth, async (req, res) => {
   try {
     const transactionId = req.params.id;
     const { type, category, amount, description, date } = req.body;
@@ -280,7 +280,7 @@ app.put("/update-transaction/:id", async (req, res) => {
   }
 });
 
-app.delete("/delete-transaction/:id", async (req, res) => {
+app.delete("/delete-transaction/:id", ensureAuth, async (req, res) => {
   try {
     const transactionId = req.params.id;
     const deleted = await Transaction.deleteOne({ _id: transactionId, userId: req.user._id });
