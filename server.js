@@ -49,16 +49,6 @@ app.get("/", (req, res) => {
   res.json("Server is running.");
 });
 
-// app.get("/auth/google", passport.authenticate("google", {
-//   scope: ["profile", "email"],
-// }));
-
-// app.get("/auth/google/otunar/", passport.authenticate("google", {
-//     successRedirect: process.env.APPLICATION_URL, 
-//     failureRedirect: process.env.APPLICATION_URL + "/login?error=Invalid credentials",
-//   })
-// );
-
 app.get("/logout", (req, res, next) => {
   req.logOut(err => {
     if (err) return next(err);
@@ -68,21 +58,15 @@ app.get("/logout", (req, res, next) => {
 });
 
 app.get("/me", (req, res) => {
-  if (req.isAuthenticated()) {
-    res.status(200).json({ loggedIn: true, user: req.user });
-  } else {
-    res.status(401).json({ loggedIn: false });
-  }
+  // Removed auth check
+  res.status(200).json({ loggedIn: req.isAuthenticated(), user: req.user || null });
 });
 
-const ensureAuth = (req, res, next) => {
-  if (req.isAuthenticated()) return next();
-  res.status(401).json({ message: "Not authenticated" });
-};
+// Removed ensureAuth completely
 
-app.get("/all-transactions", ensureAuth, async (req, res) => {
+app.get("/all-transactions", async (req, res) => {
   try {
-    const allTransaction = await Transaction.find({userId: req.user._id});
+    const allTransaction = await Transaction.find({}); // no user filter
     res.json(allTransaction);
 
   } catch (error) {
@@ -91,16 +75,14 @@ app.get("/all-transactions", ensureAuth, async (req, res) => {
   }
 });
 
-app.get("/filter", ensureAuth, async (req, res) => {
+app.get("/filter", async (req, res) => {
   const { type, category, startDate, endDate} = req.query;
 
   try {
-    let filter = { userId : req.user._id};
+    let filter = {};
 
-    if (type) {
-      filter.type = type;
-      if (category) filter.category = category;
-    }
+    if (type) filter.type = type;
+    if (category) filter.category = category;
 
     if (startDate || endDate) {
       filter.date = {};
@@ -111,17 +93,19 @@ app.get("/filter", ensureAuth, async (req, res) => {
         filter.date.$lte = end;
       } 
     }
+
     const filteredData = await Transaction.find(filter).sort({ date: -1 });
     res.json(filteredData);
   } catch (error) {
     console.log("Error before filtering : ", error);
+    res.status(500).json({ message: "Failed to filter transactions" });
   }
 });
 
-app.get("/generate-report", ensureAuth, async (req, res) => {
+app.get("/generate-report", async (req, res) => {
   try {
     const month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const transactions = await Transaction.find({userId: req.user._id, date: {$gte: month}});
+    const transactions = await Transaction.find({ date: { $gte: month } }); // no user filter
 
     const totalIncome = transactions
       .filter(t => t.type === "income")
@@ -162,34 +146,6 @@ app.get("/generate-report", ensureAuth, async (req, res) => {
     res.status(500).json({ report: "Failed to generate report due to server error." });
   }
 });
-
-
-// app.post("/register", async (req, res) => {
-//   const { email, password } = req.body;
-
-//   const existingUser = await User.findOne({email});
-//   if (existingUser) {
-//     return res.status(404).json({ message : "Account already exists."});
-//   }
-
-//   const hashedPassword = await bcrypt.hash(password, saltRounds);  
-//   const newUser = new User({
-//     email,
-//     password : hashedPassword,
-//   });
-
-//   await newUser.save();
-
-//   req.login(newUser, err=> {
-//     if (err) {
-//       console.log("Login error:", err);
-//       return res.status(500).json({ message: "Login failed after registration" }); 
-//     }
-
-//     return res.status(201).json({ message: "User registered and logged in successfully" });
-//   });
-
-// });
 
 app.post("/register", async (req, res) => {
   try {
@@ -234,17 +190,12 @@ app.post("/login", (req, res, next) => {
   })(req, res, next);
 });
 
-app.post("/add-transaction", ensureAuth, async (req, res) => {
+app.post("/add-transaction", async (req, res) => {
   try {
     const { type, category, amount, date, description } = req.body;
 
     const newTransaction = new Transaction({
-      type: type, 
-      category: category, 
-      amount: amount, 
-      date: date, 
-      description: description, 
-      userId: req.user._id
+      type, category, amount, date, description
     });
 
     await newTransaction.save();
@@ -255,16 +206,15 @@ app.post("/add-transaction", ensureAuth, async (req, res) => {
     console.error("Error saving transaction:", err);
     res.status(500).json({ message: "Failed to save transaction" });
   }
-  
 });
 
-app.put("/update-transaction/:id", ensureAuth, async (req, res) => {
+app.put("/update-transaction/:id", async (req, res) => {
   try {
     const transactionId = req.params.id;
     const { type, category, amount, description, date } = req.body;
 
     const updated = await Transaction.findOneAndUpdate(
-      { _id: transactionId, userId: req.user._id },
+      { _id: transactionId },
       { type, category, amount, description, date },
       { new: true }
     );
@@ -280,10 +230,10 @@ app.put("/update-transaction/:id", ensureAuth, async (req, res) => {
   }
 });
 
-app.delete("/delete-transaction/:id", ensureAuth, async (req, res) => {
+app.delete("/delete-transaction/:id", async (req, res) => {
   try {
     const transactionId = req.params.id;
-    const deleted = await Transaction.deleteOne({ _id: transactionId, userId: req.user._id });
+    const deleted = await Transaction.deleteOne({ _id: transactionId });
     res.status(200).json({ message: "Transaction deleted successfully" });
   } catch (error) {
     console.error("Error deleting transaction:", error);
@@ -316,31 +266,6 @@ passport.use("local",
   })
 );
 
-// passport.use("google", new GoogleStrategy({
-//   clientID: process.env.GOOGLE_CLIENT_ID,
-//   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-//   callbackURL: process.env.GOOGLE_CALLBACK_URL,
-//   userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
-// }, async (accessToken, refreshToken, profile, cb) => {
-
-//   try {
-//     const existingUser = await User.findOne({email : profile.email});
-
-//     if (existingUser) {
-//       cb(null, existingUser);
-//     } else {
-//       const newUser = new User({
-//         email : profile.email,
-//         password : "google",
-//       });
-//       await newUser.save();
-//       cb(null, newUser);
-//     }
-//   } catch (err) {
-//     return cb(err);
-//   }
-// }));
-
 passport.serializeUser((user, cb) => {
   cb(null, user._id);
 });
@@ -353,7 +278,6 @@ passport.deserializeUser(async (id, cb) => {
     cb(err);
   }
 });
-
 
 app.listen(port, () => {
   console.log(`App is running on http://localhost:${port}.`)
