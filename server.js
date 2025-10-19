@@ -28,7 +28,7 @@ app.use(session({
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // only over HTTPS
+    secure: true, // set to true if using HTTPS
     sameSite: 'none', // allows cross-origin cookies
   },
 }));
