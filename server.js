@@ -55,8 +55,8 @@ app.get("/", (req, res) => {
   res.json("Server is running.");
 });
 
-// Google Auth (commented)
-/*
+// Google Auth
+
 app.get("/auth/google", passport.authenticate("google", {
   scope: ["profile", "email"],
 }));
@@ -65,7 +65,6 @@ app.get("/auth/google/otunar/", passport.authenticate("google", {
   successRedirect: process.env.APPLICATION_URL,
   failureRedirect: process.env.APPLICATION_URL + "/login?error=Invalid credentials",
 }));
-*/
 
 app.get("/logout", (req, res, next) => {
   req.logOut((err) => {
@@ -173,7 +172,7 @@ app.get("/generate-report", ensureAuth, async (req, res) => {
 // =============================
 // Auth Routes
 // =============================
-/*
+
 app.post("/register", async (req, res) => {
   const { email, password } = req.body;
   const existingUser = await User.findOne({ email });
@@ -191,7 +190,6 @@ app.post("/register", async (req, res) => {
     return res.status(201).json({ message: "User registered and logged in successfully" });
   });
 });
-*/
 
 app.post("/register", async (req, res) => {
   try {
@@ -315,8 +313,7 @@ passport.use(
   })
 );
 
-/*
-// Google Auth Strategy (commented)
+// Google Auth Strategy
 passport.use("google", new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -339,7 +336,6 @@ passport.use("google", new GoogleStrategy({
     return cb(err);
   }
 }));
-*/
 
 passport.serializeUser((user, cb) => {
   cb(null, user._id);
