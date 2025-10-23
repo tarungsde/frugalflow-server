@@ -23,11 +23,12 @@ app.use(
   session({
     secret: process.env.SESSION_SECRET,
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
     cookie: {
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      secure: false,
+      secure: true,
       httpOnly: true,
+      sameSite: "none",
     },
   })
 );
@@ -35,6 +36,8 @@ app.use(
   cors({
     origin: process.env.APPLICATION_URL,
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
   })
 );
 app.use(passport.initialize());
@@ -65,7 +68,9 @@ app.get("/auth/google/otunar", passport.authenticate("google", {
   failureRedirect: process.env.APPLICATION_URL + "/login?error=Google authentication failed",
 }), (req, res) => {
   // Successful authentication
-  res.redirect(process.env.APPLICATION_URL + "/dashboard");
+  console.log("Google auth successful, user:", req.user); // Add this
+  console.log("Session ID:", req.sessionID); // Add this
+  res.redirect(process.env.APPLICATION_URL + "/");
 });
 
 app.get("/logout", (req, res, next) => {
