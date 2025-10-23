@@ -65,11 +65,6 @@ app.get("/auth/google", passport.authenticate("google", {
   scope: ["profile", "email"],
 }));
 
-// Google Auth Routes - UPDATED
-app.get("/auth/google", passport.authenticate("google", {
-  scope: ["profile", "email"],
-}));
-
 app.get("/auth/google/otunar", 
   passport.authenticate("google", { 
     failureRedirect: process.env.APPLICATION_URL + "/login?error=Google authentication failed",
@@ -212,23 +207,6 @@ app.get("/generate-report", ensureAuth, async (req, res) => {
 // Auth Routes
 // =============================
 
-app.post("/register", async (req, res) => {
-  const { email, password } = req.body;
-  const existingUser = await User.findOne({ email });
-  if (existingUser) {
-    return res.status(404).json({ message: "Account already exists." });
-  }
-  const hashedPassword = await bcrypt.hash(password, saltRounds);
-  const newUser = new User({ email, password: hashedPassword });
-  await newUser.save();
-  req.login(newUser, (err) => {
-    if (err) {
-      console.log("Login error:", err);
-      return res.status(500).json({ message: "Login failed after registration" });
-    }
-    return res.status(201).json({ message: "User registered and logged in successfully" });
-  });
-});
 
 app.post("/register", async (req, res) => {
   try {
@@ -359,7 +337,7 @@ passport.use("google", new GoogleStrategy({
   callbackURL: process.env.GOOGLE_CALLBACK_URL,
   userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
   passReqToCallback: true,
-}, async (accessToken, refreshToken, profile, cb) => {
+}, async (req, accessToken, refreshToken, profile, cb) => {
   try {
     console.log("Google profile received:", profile.email); // Debug log
     const existingUser = await User.findOne({ email: profile.email });
