@@ -77,7 +77,8 @@ app.get("/auth/google/otunar",
   }),
   (req, res) => {
     // Successful authentication
-    console.log("Google auth successful for user:", req.user.email);
+    console.log("Callback - User authenticated:", req.user ? req.user.email : "No user");
+    console.log("Callback - Is authenticated:", req.isAuthenticated());
     
     // Ensure session is saved before redirect
     req.session.save((err) => {
@@ -85,6 +86,7 @@ app.get("/auth/google/otunar",
         console.log("Session save error:", err);
         return res.redirect(process.env.APPLICATION_URL + "/login?error=Session error");
       }
+      console.log("Session saved successfully");
       res.redirect(process.env.APPLICATION_URL);
     });
   }
@@ -359,6 +361,7 @@ passport.use("google", new GoogleStrategy({
   passReqToCallback: true,
 }, async (accessToken, refreshToken, profile, cb) => {
   try {
+    console.log("Google profile received:", profile.email); // Debug log
     const existingUser = await User.findOne({ email: profile.email });
     if (existingUser) {
       cb(null, existingUser);
@@ -376,14 +379,21 @@ passport.use("google", new GoogleStrategy({
 }));
 
 passport.serializeUser((user, cb) => {
+  console.log("Serializing user:", user.email); // Debug log
   cb(null, user._id);
 });
 
 passport.deserializeUser(async (id, cb) => {
   try {
+    console.log("Deserializing user ID:", id); // Debug log
     const user = await User.findById(id);
+    if (!user) {
+      return cb(new Error('User not found'));
+    }
+    console.log("Deserialized user:", user.email); // Debug log
     cb(null, user);
   } catch (err) {
+    console.log("Deserialize error:", err); // Debug log
     cb(err);
   }
 });
