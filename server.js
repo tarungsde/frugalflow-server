@@ -62,9 +62,11 @@ app.get("/auth/google", passport.authenticate("google", {
 }));
 
 app.get("/auth/google/otunar", passport.authenticate("google", {
-  successRedirect: process.env.APPLICATION_URL,
-  failureRedirect: process.env.APPLICATION_URL + "/login?error=Invalid credentials",
-}));
+  failureRedirect: process.env.APPLICATION_URL + "/login?error=Google authentication failed",
+}), (req, res) => {
+  // Successful authentication
+  res.redirect(process.env.APPLICATION_URL + "/dashboard");
+});
 
 app.get("/logout", (req, res, next) => {
   req.logOut((err) => {
