@@ -30,6 +30,7 @@ app.use(
       secure: true,
       httpOnly: true,
       sameSite: "none",
+      domain: ".onrender.com",
     },
   })
 );
