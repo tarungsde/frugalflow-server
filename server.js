@@ -22,8 +22,9 @@ app.use(express.json());
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
-    resave: false,
+    resave: true,
     saveUninitialized: false,
+    proxy: true,
     cookie: {
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
       secure: true,
@@ -64,14 +65,30 @@ app.get("/auth/google", passport.authenticate("google", {
   scope: ["profile", "email"],
 }));
 
-app.get("/auth/google/otunar", passport.authenticate("google", {
-  failureRedirect: process.env.APPLICATION_URL + "/login?error=Google authentication failed",
-}), (req, res) => {
-  // Successful authentication
-  console.log("Google auth successful, user:", req.user); // Add this
-  console.log("Session ID:", req.sessionID); // Add this
-  res.redirect(process.env.APPLICATION_URL + "/");
-});
+// Google Auth Routes - UPDATED
+app.get("/auth/google", passport.authenticate("google", {
+  scope: ["profile", "email"],
+}));
+
+app.get("/auth/google/otunar", 
+  passport.authenticate("google", { 
+    failureRedirect: process.env.APPLICATION_URL + "/login?error=Google authentication failed",
+    failureMessage: true 
+  }),
+  (req, res) => {
+    // Successful authentication
+    console.log("Google auth successful for user:", req.user.email);
+    
+    // Ensure session is saved before redirect
+    req.session.save((err) => {
+      if (err) {
+        console.log("Session save error:", err);
+        return res.redirect(process.env.APPLICATION_URL + "/login?error=Session error");
+      }
+      res.redirect(process.env.APPLICATION_URL);
+    });
+  }
+);
 
 app.get("/logout", (req, res, next) => {
   req.logOut((err) => {
@@ -132,6 +149,19 @@ app.get("/filter", ensureAuth, async (req, res) => {
   } catch (error) {
     console.log("Error before filtering : ", error);
   }
+});
+
+// Add this debug route to your server
+app.get("/debug-session", (req, res) => {
+  console.log("Session ID:", req.sessionID);
+  console.log("User:", req.user);
+  console.log("Is Authenticated:", req.isAuthenticated());
+  res.json({
+    sessionID: req.sessionID,
+    user: req.user,
+    authenticated: req.isAuthenticated(),
+    cookies: req.headers.cookie
+  });
 });
 
 app.get("/generate-report", ensureAuth, async (req, res) => {
@@ -326,6 +356,7 @@ passport.use("google", new GoogleStrategy({
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   callbackURL: process.env.GOOGLE_CALLBACK_URL,
   userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
+  passReqToCallback: true,
 }, async (accessToken, refreshToken, profile, cb) => {
   try {
     const existingUser = await User.findOne({ email: profile.email });
