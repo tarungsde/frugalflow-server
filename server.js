@@ -5,13 +5,25 @@ import Transaction from "./models/Transaction.js";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
 import cors from "cors";
-import session from "express-session";
 import passport from "passport";
 import { Strategy } from "passport-local";
 import GoogleStrategy from "passport-google-oauth2";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import jwt from "jsonwebtoken";
 
 dotenv.config();
+
+const generateToken = (user) => {
+  return jwt.sign(
+    { userId: user._id, email: user.email },
+    process.env.JWT_SECRET || 'your-callback-secret',
+    { expiresIn: "7d" }
+  );
+};
+
+const verifyToken = (token) => {
+    return jwt.verify(token, process.env.JWT_SECRET || 'your-callback-secret');
+};
 
 const app = express();
 const port = process.env.PORT;
@@ -19,21 +31,6 @@ const saltRounds = parseInt(process.env.SALT_ROUNDS);
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.use(express.json());
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET,
-    resave: true,
-    saveUninitialized: false,
-    proxy: true,
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      secure: true,
-      httpOnly: true,
-      sameSite: "none",
-      domain: ".onrender.com",
-    },
-  })
-);
 app.use(
   cors({
     origin: process.env.APPLICATION_URL,
@@ -43,7 +40,6 @@ app.use(
   })
 );
 app.use(passport.initialize());
-app.use(passport.session());
 
 // =============================
 // Database Connection
@@ -69,22 +65,15 @@ app.get("/auth/google", passport.authenticate("google", {
 app.get("/auth/google/otunar", 
   passport.authenticate("google", { 
     failureRedirect: process.env.APPLICATION_URL + "/login?error=Google authentication failed",
-    failureMessage: true 
+    session: false
   }),
   (req, res) => {
     // Successful authentication
     console.log("Callback - User authenticated:", req.user ? req.user.email : "No user");
-    console.log("Callback - Is authenticated:", req.isAuthenticated());
     
-    // Ensure session is saved before redirect
-    req.session.save((err) => {
-      if (err) {
-        console.log("Session save error:", err);
-        return res.redirect(process.env.APPLICATION_URL + "/login?error=Session error");
-      }
-      console.log("Session saved successfully");
-      res.redirect(process.env.APPLICATION_URL);
-    });
+    const token = generateToken(req.user);
+    const redirectUrl = `${process.env.APPLICATION_URL}/auth/success?token=${token}`;
+    res.redirect(redirectUrl);
   }
 );
 
@@ -96,20 +85,24 @@ app.get("/logout", (req, res, next) => {
   });
 });
 
-app.get("/me", (req, res) => {
-  if (req.isAuthenticated()) {
-    res.status(200).json({ loggedIn: true, user: req.user });
-  } else {
-    res.status(401).json({ loggedIn: false });
-  }
-});
-
 // =============================
 // Middleware
 // =============================
+
 const ensureAuth = (req, res, next) => {
-  if (req.isAuthenticated()) return next();
-  res.status(401).json({ message: "Not authenticated" });
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!token) {
+    return res.status(401).json({ message: "No token provided" });
+  }
+
+  try {
+    const decoded = verifyToken(token);
+    req.userId = decoded.userId;
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid token" });
+  }
 };
 
 // =============================
@@ -117,7 +110,7 @@ const ensureAuth = (req, res, next) => {
 // =============================
 app.get("/all-transactions", ensureAuth, async (req, res) => {
   try {
-    const allTransaction = await Transaction.find({ userId: req.user._id });
+    const allTransaction = await Transaction.find({ userId: req.userId });
     res.json(allTransaction);
   } catch (error) {
     console.error("Error fetching transactions:", error);
@@ -128,7 +121,7 @@ app.get("/all-transactions", ensureAuth, async (req, res) => {
 app.get("/filter", ensureAuth, async (req, res) => {
   const { type, category, startDate, endDate } = req.query;
   try {
-    let filter = { userId: req.user._id };
+    let filter = { userId: req.userId };
     if (type) {
       filter.type = type;
       if (category) filter.category = category;
@@ -149,24 +142,11 @@ app.get("/filter", ensureAuth, async (req, res) => {
   }
 });
 
-// Add this debug route to your server
-app.get("/debug-session", (req, res) => {
-  console.log("Session ID:", req.sessionID);
-  console.log("User:", req.user);
-  console.log("Is Authenticated:", req.isAuthenticated());
-  res.json({
-    sessionID: req.sessionID,
-    user: req.user,
-    authenticated: req.isAuthenticated(),
-    cookies: req.headers.cookie
-  });
-});
-
 app.get("/generate-report", ensureAuth, async (req, res) => {
   try {
     const month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const transactions = await Transaction.find({
-      userId: req.user._id,
+      userId: req.userId,
       date: { $gte: month },
     });
 
@@ -261,7 +241,7 @@ app.post("/add-transaction", ensureAuth, async (req, res) => {
       amount,
       date,
       description,
-      userId: req.user._id,
+      userId: req.userId,
     });
     await newTransaction.save();
     res.status(201).json({ message: "Transaction received" });
@@ -277,7 +257,7 @@ app.put("/update-transaction/:id", ensureAuth, async (req, res) => {
     const { type, category, amount, description, date } = req.body;
 
     const updated = await Transaction.findOneAndUpdate(
-      { _id: transactionId, userId: req.user._id },
+      { _id: transactionId, userId: req.userId },
       { type, category, amount, description, date },
       { new: true }
     );
@@ -296,7 +276,7 @@ app.put("/update-transaction/:id", ensureAuth, async (req, res) => {
 app.delete("/delete-transaction/:id", ensureAuth, async (req, res) => {
   try {
     const transactionId = req.params.id;
-    await Transaction.deleteOne({ _id: transactionId, userId: req.user._id });
+    await Transaction.deleteOne({ _id: transactionId, userId: req.userId });
     res.status(200).json({ message: "Transaction deleted successfully" });
   } catch (error) {
     console.error("Error deleting transaction:", error);
@@ -338,7 +318,7 @@ passport.use("google", new GoogleStrategy({
   callbackURL: process.env.GOOGLE_CALLBACK_URL,
   userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
   passReqToCallback: true,
-}, async (req, accessToken, refreshToken, profile, cb) => {
+}, async (accessToken, refreshToken, profile, cb) => {
   try {
     console.log("Google profile received:", profile.email); // Debug log
     const existingUser = await User.findOne({ email: profile.email });
@@ -350,32 +330,14 @@ passport.use("google", new GoogleStrategy({
         password: "google",
       });
       await newUser.save();
+      console.log("New user created:", newUser.email);
       cb(null, newUser);
     }
   } catch (err) {
+    console.log("Google strategy error:", err);
     return cb(err);
   }
 }));
-
-passport.serializeUser((user, cb) => {
-  console.log("Serializing user:", user.email); // Debug log
-  cb(null, user._id);
-});
-
-passport.deserializeUser(async (id, cb) => {
-  try {
-    console.log("Deserializing user ID:", id); // Debug log
-    const user = await User.findById(id);
-    if (!user) {
-      return cb(new Error('User not found'));
-    }
-    console.log("Deserialized user:", user.email); // Debug log
-    cb(null, user);
-  } catch (err) {
-    console.log("Deserialize error:", err); // Debug log
-    cb(err);
-  }
-});
 
 // =============================
 // Server Start
