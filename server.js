@@ -58,10 +58,6 @@ app.get("/", (req, res) => {
 
 // Google Auth
 
-app.get("/auth/google", passport.authenticate("google", {
-  scope: ["profile", "email"],
-}));
-
 app.get("/auth/google/otunar", 
   passport.authenticate("google", { 
     failureRedirect: process.env.APPLICATION_URL + "/login?error=Google authentication failed",
@@ -317,7 +313,6 @@ passport.use("google", new GoogleStrategy({
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   callbackURL: process.env.GOOGLE_CALLBACK_URL,
   userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
-  passReqToCallback: true,
 }, async (accessToken, refreshToken, profile, cb) => {
   try {
     console.log("Google profile received:", profile.email); // Debug log
