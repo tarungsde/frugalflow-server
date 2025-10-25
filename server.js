@@ -69,8 +69,16 @@ app.get("/auth/google/otunar",
   (req, res) => {
     // Successful authentication
     console.log("Callback - User authenticated:", req.user ? req.user.email : "No user");
+    console.log("SERVER CALLBACK - Generating token...");
+
+    if (!req.user) {
+      console.log("SERVER CALLBACK - No user object found");
+      return res.redirect(process.env.APPLICATION_URL + "/login?error=No user data");
+    }
     
     const token = generateToken(req.user);
+    console.log("SERVER CALLBACK - Token generated, redirecting to:", `${process.env.APPLICATION_URL}/auth/google/otunar?token=${token.substring(0, 20)}...`);
+
     const redirectUrl = `${process.env.APPLICATION_URL}/auth/success?token=${token}`;
     res.redirect(redirectUrl);
   }
