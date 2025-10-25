@@ -57,6 +57,9 @@ app.get("/", (req, res) => {
 });
 
 // Google Auth
+app.get("/auth/google", passport.authenticate("google", {
+  scope: ["profile", "email"],
+}));
 
 app.get("/auth/google/otunar", 
   passport.authenticate("google", { 
